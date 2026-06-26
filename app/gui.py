@@ -6,6 +6,7 @@ import os
 import traceback
 
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -343,7 +344,7 @@ class TransformTab(QWidget):
             for c, v in enumerate(values):
                 item = QTableWidgetItem(v)
                 if p.aux_type and not p.aux_code and c == 5:
-                    item.setBackground(Qt.yellow)
+                    item.setBackground(QColor(Qt.yellow))
                 self.preview.setItem(r, c, item)
 
     def _show_steps(self):

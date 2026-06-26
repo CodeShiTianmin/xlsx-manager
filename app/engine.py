@@ -41,6 +41,8 @@ class Processed:
     aux_value: str = ""
     aux_code: str = ""
     aux_name: str = ""
+    # 多辅助核算：每个元素为 (类型, 取值, 档案编码, 档案名称)
+    aux_list: list[tuple[str, str, str, str]] = field(default_factory=list)
     steps: list[tuple[str, str]] = field(default_factory=list)
     # 凭证头
     period: str = ""
@@ -124,24 +126,25 @@ class Engine:
         p.steps.append(("映射用友科目", f"{matched}；辅助核算={aux_raw or '(无)'}"))
 
         aux_types = [t.replace("*", "").strip() for t in aux_raw.split("|") if t.strip()]
-        aux_value = segments[-1] if segments else ""
-        chosen_type, chosen_code, chosen_name = "", "", aux_value
-        for t in aux_types:
-            c, n = self.resolve_aux(t, aux_value)
-            if c:
-                chosen_type, chosen_code, chosen_name = t, c, n
-                break
-        if not chosen_type and aux_types:
-            chosen_type = aux_types[0]
-            chosen_code, chosen_name = self.resolve_aux(chosen_type, aux_value)
-        p.aux_type = chosen_type
-        p.aux_value = aux_value
-        p.aux_code = chosen_code
-        p.aux_name = chosen_name or aux_value
-        if chosen_type:
-            p.steps.append(
-                ("解析辅助核算", f"类型={chosen_type}；值={aux_value}；档案编码={chosen_code or '(未匹配)'}")
+        # 多辅助核算时，按顺序把科目名称尾部的各个段依次赋给每个辅助类型。
+        n = len(aux_types)
+        if n:
+            tail = segments[-n:] if len(segments) >= n else [""] * (n - len(segments)) + segments
+        else:
+            tail = []
+        aux_list: list[tuple[str, str, str, str]] = []
+        for t, val in zip(aux_types, tail):
+            c, nm = self.resolve_aux(t, val)
+            aux_list.append((t, val, c, nm or val))
+        p.aux_list = aux_list
+        # 选一个作为主辅助（优先已解析出档案编码的），用于界面展示。
+        primary = next((a for a in aux_list if a[2]), aux_list[0] if aux_list else ("", "", "", ""))
+        p.aux_type, p.aux_value, p.aux_code, p.aux_name = primary
+        if aux_list:
+            detail = "；".join(
+                f"{t}={val}→{c or '(未匹配)'}" for t, val, c, _ in aux_list
             )
+            p.steps.append(("解析辅助核算", detail))
         else:
             p.steps.append(("解析辅助核算", "无辅助核算"))
 
@@ -149,14 +152,16 @@ class Engine:
         value = (value or "").strip()
         if not value:
             return "", ""
+        # 同名多档时，优先选择纯数字档案编码、再按长度/字典序，保证结果确定。
+        order = "ORDER BY (CASE WHEN code GLOB '*[^0-9]*' THEN 1 ELSE 0 END), length(code), code LIMIT 1"
         table = AUX_DICT.get(aux_type)
         if table:
-            rows = self.db.query(f"SELECT code, name FROM {table} WHERE name=? LIMIT 1", (value,))
+            rows = self.db.query(f"SELECT code, name FROM {table} WHERE name=? {order}", (value,))
             if rows:
                 return rows[0]["code"], rows[0]["name"]
         # 客户找不到时回退到账簿（内部往来单位）
         if aux_type == "客户":
-            rows = self.db.query("SELECT code, name FROM dict_ledger WHERE name=? LIMIT 1", (value,))
+            rows = self.db.query(f"SELECT code, name FROM dict_ledger WHERE name=? {order}", (value,))
             if rows:
                 return rows[0]["code"], rows[0]["name"]
         return "", value
@@ -207,7 +212,7 @@ class Engine:
         row[11] = cfg.get("maker_mobile", "")
         row[12] = cfg.get("maker_name", "")
         row[19] = p.yy_code
-        row[20] = p.yy_name
+        # 科目名称(列20)在用友导入模板中留空（由科目编码自动带出），与参考输出保持一致。
         row[21] = p.summary
         row[22] = cfg.get("currency_code", "CNY")
         row[23] = p.debit
@@ -217,11 +222,16 @@ class Engine:
         row[27] = "1"
         row[28] = p.debit
         row[29] = p.credit
-        cols = AUX_TYPE_COLUMNS.get(p.aux_type)
-        if cols:
+        for aux_type, _val, aux_code, aux_name in p.aux_list:
+            cols = AUX_TYPE_COLUMNS.get(aux_type)
+            if not cols or not aux_code:
+                continue
             code_col, name_col = cols
-            row[code_col] = p.aux_code or p.aux_name
-            row[name_col] = p.aux_name
+            row[code_col] = aux_code
+            # 银行账户：当档案有独立账号编码（编码≠名称）时名称列留空，
+            # 编码与名称一致（别名档案）时才填名称，与参考输出保持一致。
+            if not (aux_type == "银行账户" and aux_code != aux_name):
+                row[name_col] = aux_name
         return row
 
     def build_matrix(self, processed: list[Processed]) -> list[list[str]]:
