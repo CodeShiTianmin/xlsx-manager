@@ -6,14 +6,14 @@
 
 from __future__ import annotations
 
-import os
+from .resources import resource_path
 
 # 模板表头占用的行数（数据从第 HEADER_ROWS+1 行开始）
 HEADER_ROWS = 9
 DATA_SHEET = "凭证查询卡片主表"
 
 # 导出模板骨架（仅保留 9 行表头），导出时复制它再追加数据行。
-TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "templates", "output_template.xlsx")
+TEMPLATE_PATH = resource_path("templates", "output_template.xlsx")
 
 # (索引, fieldCode, 中文名)，索引与模板列严格对应。
 COLUMNS: list[tuple[int, str, str]] = [
