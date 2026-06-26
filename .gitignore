@@ -5,3 +5,6 @@ app/data/
 用友导入.xlsx
 .venv/
 venv/
+build/
+dist/
+*.manifest
