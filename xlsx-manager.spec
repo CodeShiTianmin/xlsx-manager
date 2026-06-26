@@ -8,8 +8,8 @@
 block_cipher = None
 
 a = Analysis(
-    ["app/__main__.py"],
-    pathex=[],
+    ["launcher.py"],
+    pathex=["."],
     binaries=[],
     # 只读资源（输出模板）随包带入，运行时通过 sys._MEIPASS 定位。
     datas=[("app/templates/output_template.xlsx", "templates")],
