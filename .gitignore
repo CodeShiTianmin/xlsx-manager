@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+app/data/
+*.db
+用友导入.xlsx
+.venv/
+venv/
