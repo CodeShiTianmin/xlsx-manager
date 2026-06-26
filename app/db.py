@@ -9,7 +9,9 @@ import os
 import sqlite3
 from typing import Any
 
-DEFAULT_DB_PATH = os.path.join(os.path.dirname(__file__), "data", "xlsx_manager.db")
+from .resources import writable_data_dir
+
+DEFAULT_DB_PATH = os.path.join(writable_data_dir(), "xlsx_manager.db")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS import_entries (
